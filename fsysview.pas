@@ -41,10 +41,11 @@ type
 
   public
     constructor Create(AOwner: TComponent); override;
-    property FSTreeView: TFileSystemTreeView read GetFSTreeView;
-    property FileListView: TFileListView read GetFileListView;
+    procedure Loaded; override;
   published
     property Directory: string read FDirectory write SetDirectory;
+    property FSTreeView: TFileSystemTreeView read GetFSTreeView;
+    property FileListView: TFileListView read GetFileListView;
   end;
 
 procedure Register;
@@ -78,6 +79,12 @@ begin
 
 end;
 
+procedure TFileSystemView.Loaded;
+begin
+  inherited Loaded;
+  if Directory = '' then Directory := GetEnvironmentVariable('HOME')
+end;
+
 function TFileSystemView.GetFileListView: TFileListView;
 begin
   if not Assigned(FFileListView) then begin
@@ -98,7 +105,7 @@ end;
 
 procedure TFileSystemView.SetDirectory(AValue: string);
 begin
-  {Baumansicht und Dateilistenansicht für den Knoten Directory erstellen}
+  {...} {Baumansicht und Dateilistenansicht für den Knoten AValue erstellen}
   FDirectory := AValue
 end;
 
