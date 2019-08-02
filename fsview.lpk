@@ -9,12 +9,16 @@
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="1">
+    <Files Count="2">
       <Item1>
         <Filename Value="fsysview.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="FSysView"/>
       </Item1>
+      <Item2>
+        <Filename Value="fstree.pas"/>
+        <UnitName Value="fstree"/>
+      </Item2>
     </Files>
     <RequiredPkgs Count="3">
       <Item1>

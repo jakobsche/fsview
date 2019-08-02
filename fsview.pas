@@ -8,7 +8,7 @@ unit fsview;
 interface
 
 uses
-  FSysView, LazarusPackageIntf;
+  FSysView, FSTree, LazarusPackageIntf;
 
 implementation
 
