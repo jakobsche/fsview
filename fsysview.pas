@@ -6,22 +6,24 @@ interface
 
 uses
   Classes, SysUtils, LResources, Forms, Controls, Graphics, Dialogs, PairSplitter,
-  ComCtrls;
+  ComCtrls, FSTree;
 
 type
   TFileSystemView = class;
 
   { TFileSystemTreeView }
 
-  TFileSystemTreeView = class(TTreeView)
+  TFileSystemTreeView = class(TCustomTreeView)
   private
     function GetFileSystemView: TFileSystemView;
     property FSView: TFileSystemView read GetFileSystemView;
+  public
+    constructor Create(AOwner: TComponent); override;
   end;
 
   { TFileListView }
 
-  TFileListView = class(TListView)
+  TFileListView = class(TCustomListView)
   private
     function GetFileSystemView: TFileSystemView;
     property FSView: TFileSystemView read GetFileSystemView;
@@ -31,12 +33,16 @@ type
 
   TFileSystemView = class(TPairSplitter)
   private
+    FFileSystem: TFileSystem;
+    function GetFileSystem: TFileSystem;
+  private
     FDirectory: string;
     FFileListView: TFileListView;
     FFSTreeView: TFileSystemTreeView;
     function GetFileListView: TFileListView;
     function GetFSTreeView: TFileSystemTreeView;
     procedure SetDirectory(AValue: string);
+    property FileSystem: TFileSystem read GetFileSystem;
   protected
 
   public
@@ -79,6 +85,22 @@ begin
   Result := Owner as TFileSystemView
 end;
 
+constructor TFileSystemTreeView.Create(AOwner: TComponent);
+var
+  Data: TFileSystemNode;
+  P, TN: TTreeNode;
+begin
+  inherited Create(AOwner);
+  P := Items.AddObjectFirst(nil, '/', FSView.FileSystem.Root);
+  Data := FSView.FileSystem.Root.FirstChild;
+  if Data <> nil then TN := Items.AddChildObjectFirst(P, Data.NodeName, Data);
+  while Data.Next <> nil do begin
+    Data := Data.Next;
+    if Data.IsDirectory then TN := P.TreeNodes.AddObject(TN, Data.NodeName, Data)
+  end;
+  ReadOnly := True
+end;
+
 { TFileSystemView }
 
 constructor TFileSystemView.Create(AOwner: TComponent);
@@ -89,23 +111,20 @@ var
   FD: TFileDescription;
 begin
   inherited Create(AOwner);
-  R := FindFirst('/', faDirectory, SR);
-  if R = 0 then begin
-    FD := TFileDescription.Create;
-    Move(SR, FD.FSR, SizeOf(SR));
-    Root := FSTreeView.Items.AddObjectFirst(nil, '/', FD);
-  end;
-  FindClose(SR);
-  R := FindFirst('/*', faDirectory, SR);
-  Directory := GetEnvironmentVariable('HOME');
-  TN := FSTreeView.Items.FindNodeWithTextPath('Directory');
-  if TN = nil then TN := FSTreeView.Items.AddObject(Root, Directory, FD);
+  GetFSTreeView;
 end;
 
 procedure TFileSystemView.Loaded;
 begin
-  inherited Loaded;
-  if Directory = '' then Directory := GetEnvironmentVariable('HOME')
+  inherited Loaded
+end;
+
+function TFileSystemView.GetFileSystem: TFileSystem;
+begin
+  if not Assigned(FFileSystem) then begin
+    FFileSystem := TFileSystem.Create(Self);
+  end;
+  Result := FFileSystem;
 end;
 
 function TFileSystemView.GetFileListView: TFileListView;
@@ -123,7 +142,7 @@ begin
   if not Assigned(FFSTreeView) then begin
     FFSTreeView := TFileSystemTreeView.Create(Self);
     FFSTreeView.Parent := Sides[0];
-    FSTreeView.Align := alClient
+    FSTreeView.Align := alClient;
   end;
   Result := FFSTreeView
 end;

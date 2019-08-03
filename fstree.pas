@@ -16,9 +16,10 @@ type
   TFileSystem = class(TComponent)
   private
     FRoot: TFileSystemNode;
-    function GetNodeSeparator: string;
+    class function GetNodeSeparator: string;
     function GetRoot: TFileSystemNode;
   public
+    destructor Destroy; override;
     function FindNodeByFileName(AFileName: string): TFileSystemNode; overload;
     function FindNodeByFileName(CurrentNode: TFileSystemNode; AFileName: string):
       TFileSystemNode; overload;
@@ -33,21 +34,26 @@ type
     FFirstChild, FNext, FParent: TFileSystemNode;
     FSearchRecord: TSearchRec;
     function GetFileName: string;
+    function GetFirstChild: TFileSystemNode;
+    function GetNext: TFileSystemNode;
     function GetNodeName: string;
     function GetPrevious: TFileSystemNode;
     function GetRoot: TFileSystemNode;
     procedure SetPrevious(AValue: TFileSystemNode);
+    procedure SetRoot(AValue: TFileSystemNode);
   public
-    constructor Create(AFileSystem: TFileSystem; AFileName: string); virtual; overload;
-    constructor Create(AFileSystem: TFileSystem; AParent: TFileSystemNode; ASearchRec: TSearchRec); virtual; overload;
+    constructor Create(AFileSystem: TFileSystem; ANodeName: string); virtual;
+    constructor Create(AFileSystem: TFileSystem; AParent: TFileSystemNode; ASearchRec: TSearchRec); virtual;
     destructor Destroy; override;
+    function IsDirectory: Boolean;
+    function IsValid: Boolean;
     property FileName: string read GetFileName;
-    property FirstChild: TFileSystemNode read FFirstChild;
-    property Next: TFileSystemNode read FNext;
+    property FirstChild: TFileSystemNode read GetFirstChild;
+    property Next: TFileSystemNode read GetNext;
     property NodeName: string read GetNodeName;
     property Parent: TFileSystemNode read FParent;
     property Previous: TFileSystemNode read GetPrevious write SetPrevious;
-    property Root: TFileSystemNode read GetRoot;
+    property Root: TFileSystemNode read GetRoot write SetRoot;
   end;
 
 implementation
@@ -58,9 +64,19 @@ uses Patch, Op;
 
 function TFileSystem.GetRoot: TFileSystemNode;
 begin
-  if not Assigned(FRoot) then
+  if Self = nil then begin
+    Result := nil;
+    Exit
+  end;
+  if FRoot = nil then
     FRoot := TFileSystemNode.Create(Self, '/');
   Result := FRoot;
+end;
+
+destructor TFileSystem.Destroy;
+begin
+  FreeAndNil(FRoot);
+  inherited Destroy;
 end;
 
 function TFileSystem.FindNodeByFileName(AFileName: string): TFileSystemNode;
@@ -103,6 +119,52 @@ begin
   if Parent <> nil then Result := BuildFileName(Parent.FileName, Result)
 end;
 
+function TFileSystemNode.GetFirstChild: TFileSystemNode;
+var
+  R: Longint;
+  SR: TSearchRec;
+begin
+  Result := nil;
+  if Self = nil then Exit;
+  if Assigned(FFirstChild) then
+    if FFirstChild.IsValid then Result := FFirstChild
+    else begin
+      FFirstChild.Free;
+      Result := GetFirstChild
+    end
+  else
+    if IsDirectory then begin
+      R := FindFirst(BuildFileName(FileName, '*'), faAnyFile, SR);
+      if R = 0 then begin
+        FFirstChild := TFileSystemNode.Create(Owner as TFileSystem, Self, SR);
+        Result := FFirstChild
+      end
+      else FindClose(SR)
+    end
+end;
+
+function TFileSystemNode.GetNext: TFileSystemNode;
+var
+  R: Longint;
+  SR: TSearchRec;
+begin
+  Result := nil;
+  if Assigned(FNext) then
+    if FNext.IsValid then Result := FNext
+    else begin
+      FNext.Free;
+      Result := GetNext
+    end
+  else begin
+    SR := FSearchRecord;
+    R := FindNext(SR);
+    if R = 0 then FNext := TFileSystemNode.Create(Owner as TFileSystem, Parent, SR)
+    else begin
+      FindClose(SR);
+    end;
+  end;
+end;
+
 function TFileSystemNode.GetNodeName: string;
 begin
   Result := FSearchRecord.Name;
@@ -113,20 +175,22 @@ var
   x: TFileSystemNode;
 begin
   Result := nil;
-  x := Parent.FirstChild;
+  if Self = nil then Exit;
+  if Self = Root then Exit;
+  if Parent <> nil then  x := Parent.FirstChild
+  else x := Root;
   if x = Self then Exit;
   while Assigned(x) do
-    if x.Next = Self then begin
-      Result := x;
-      Break
-    end
-    else x := x.Next
+      if x.Next = Self then begin
+        Result := x;
+        Break
+      end
+      else x := x.Next
 end;
 
 function TFileSystemNode.GetRoot: TFileSystemNode;
 begin
-  Result := Self;
-  while Result.Parent <> nil do Result := Result.Parent
+  Result := (Owner as TFileSystem).Root
 end;
 
 procedure TFileSystemNode.SetPrevious(AValue: TFileSystemNode);
@@ -135,7 +199,12 @@ begin
   else Previous.Previous.FNext := AValue;
 end;
 
-function TFileSystem.GetNodeSeparator: string;
+procedure TFileSystemNode.SetRoot(AValue: TFileSystemNode);
+begin
+  (Owner as TFileSystem).FRoot := AValue
+end;
+
+class function TFileSystem.GetNodeSeparator: string;
 begin
 {$ifdef Windows}
   Result := '\'
@@ -144,7 +213,7 @@ begin
 {$endif}
 end;
 
-constructor TFileSystemNode.Create(AFileSystem: TFileSystem; AFileName: string);
+constructor TFileSystemNode.Create(AFileSystem: TFileSystem; ANodeName: string);
 var
   P: TFileSystemNode;
   PN: string;
@@ -152,17 +221,11 @@ var
   R: Longint;
 begin
   inherited Create(AFileSystem);
-  R := FindFirst(AFileName, faDirectory, SR);
+  R := FindFirst(ANodeName, faAnyFile, SR);
   if R = 0 then begin
     FSearchRecord := SR;
-    if PN <> '' then begin
-      PN := ExtractFilePath(AFileName);
-      P := AFileSystem.FindNodeByFileName(PN);
-      if P = nil then P := TFileSystemNode.Create(AFileSystem, PN);
-      FParent := P
-    end
   end
-  else raise Exception.CreateFmt('File "%s" does not exist.', [AFileName])
+  else raise Exception.CreateFmt('File "%s" does not exist.', [ANodeName])
 end;
 
 constructor TFileSystemNode.Create(AFileSystem: TFileSystem;
@@ -174,11 +237,34 @@ begin
 end;
 
 destructor TFileSystemNode.Destroy;
+var
+  x: TFileSystemNode;
 begin
-  FFirstChild.Free;
-  if Parent.FirstChild = Self then Parent.FFirstChild := Next
-  else Previous := Next;
+  if Owner <> nil then
+    if not (csDestroying in Owner.ComponentState) then begin
+      while Assigned(FFirstChild) do begin
+        x := FFirstChild;
+        FFirstChild := x.FNext;
+        x.Free
+      end;
+      if Root = Self then Root := Next
+      else
+        if Parent.FirstChild = Self then Parent.FFirstChild := Next
+        else
+          if Previous <> nil then Previous.FNext := FNext
+    end;
   inherited Destroy;
+end;
+
+function TFileSystemNode.IsDirectory: Boolean;
+begin
+  Result := FSearchRecord.Attr and faDirectory <> 0;
+end;
+
+function TFileSystemNode.IsValid: Boolean;
+begin
+  if IsDirectory then Result := DirectoryExists(FileName)
+  else Result := FileExists(FileName)
 end;
 
 end.
