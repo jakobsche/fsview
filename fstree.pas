@@ -19,7 +19,6 @@ type
     class function GetNodeSeparator: string;
     function GetRoot: TFileSystemNode;
   public
-    destructor Destroy; override;
     function FindNodeByFileName(AFileName: string): TFileSystemNode; overload;
     function FindNodeByFileName(CurrentNode: TFileSystemNode; AFileName: string):
       TFileSystemNode; overload;
@@ -41,6 +40,9 @@ type
     function GetRoot: TFileSystemNode;
     procedure SetPrevious(AValue: TFileSystemNode);
     procedure SetRoot(AValue: TFileSystemNode);
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation);
+      override;
   public
     constructor Create(AFileSystem: TFileSystem; ANodeName: string); virtual;
     constructor Create(AFileSystem: TFileSystem; AParent: TFileSystemNode; ASearchRec: TSearchRec); virtual;
@@ -64,20 +66,10 @@ uses Patch, Op;
 
 function TFileSystem.GetRoot: TFileSystemNode;
 begin
-  if Self = nil then begin
-    Result := nil;
-    Exit
-  end;
   if FRoot = nil then begin
-    FRoot := TFileSystemNode.Create(Self, '/');
+    FRoot := TFileSystemNode.Create(Self, NodeSeparator);
   end;
   Result := FRoot;
-end;
-
-destructor TFileSystem.Destroy;
-begin
-  FreeAndNil(FRoot);
-  inherited Destroy;
 end;
 
 function TFileSystem.FindNodeByFileName(AFileName: string): TFileSystemNode;
@@ -126,7 +118,6 @@ var
   SR: TSearchRec;
 begin
   Result := nil;
-  if Self = nil then Exit;
   if Assigned(FFirstChild) then
     if FFirstChild.IsValid then Result := FFirstChild
     else begin
@@ -138,6 +129,7 @@ begin
       R := FindFirst(BuildFileName(FileName, '*'), faAnyFile, SR);
       if R = 0 then begin
         FFirstChild := TFileSystemNode.Create(Owner as TFileSystem, Self, SR);
+        FFirstChild.FreeNotification(Self);
         Result := FFirstChild
       end
       else FindClose(SR)
@@ -161,6 +153,7 @@ begin
     R := FindNext(SR);
     if R = 0 then begin
       FNext := TFileSystemNode.Create(Owner as TFileSystem, Parent, SR);
+      FNext.FreeNotification(Self);
       Result := FNext
     end
     else begin
@@ -180,17 +173,17 @@ var
   x: TFileSystemNode;
 begin
   Result := nil;
-  if Self = nil then Exit;
   if Self = Root then Exit;
-  if Parent <> nil then  x := Parent.FirstChild
-  else x := Root;
-  if x = Self then Exit;
-  while Assigned(x) do
+  if Parent <> nil then begin
+    x := Parent.FirstChild;
+    if x = Self then Exit;
+    while Assigned(x) do
       if x.Next = Self then begin
         Result := x;
         Break
       end
       else x := x.Next
+  end
 end;
 
 function TFileSystemNode.GetRoot: TFileSystemNode;
@@ -200,13 +193,44 @@ end;
 
 procedure TFileSystemNode.SetPrevious(AValue: TFileSystemNode);
 begin
-  if Previous = Parent.FirstChild then Parent.FFirstChild := AValue
-  else Previous.Previous.FNext := AValue;
+  if AValue = Previous then Exit;
+  if Previous = Parent.FirstChild then begin
+    Parent.FFirstChild.Free;
+    Parent.FFirstChild := AValue;
+    Parent.FFirstChild.FreeNotification(Self)
+  end
+  else
+    with Previous.Previous do begin
+      FNext.Free;
+      FNext := AValue;
+      FNext.FreeNotification(Self);
+    end;
 end;
 
 procedure TFileSystemNode.SetRoot(AValue: TFileSystemNode);
 begin
   (Owner as TFileSystem).FRoot := AValue
+end;
+
+procedure TFileSystemNode.Notification(AComponent: TComponent;
+  Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  case Operation of
+    opRemove:
+      if AComponent <> nil then
+        if AComponent = FFirstChild then begin
+          FFirstChild.RemoveFreeNotification(Self);
+          FFirstChild := nil
+        end
+        else if AComponent = FNext then begin
+          FNext.RemoveFreeNotification(Self);
+          FNext := nil
+        end
+        else if AComponent = FParent then begin
+          FParent.RemoveFreeNotification(Self);
+        end;
+  end;
 end;
 
 class function TFileSystem.GetNodeSeparator: string;
@@ -220,8 +244,6 @@ end;
 
 constructor TFileSystemNode.Create(AFileSystem: TFileSystem; ANodeName: string);
 var
-  P: TFileSystemNode;
-  PN: string;
   SR: TSearchRec;
   R: Longint;
 begin
@@ -238,26 +260,14 @@ constructor TFileSystemNode.Create(AFileSystem: TFileSystem;
 begin
   inherited Create(AFileSystem);
   FSearchRecord := ASearchRec;
-  FParent := AParent
+  FParent := AParent;
+  FParent.FreeNotification(Self);
 end;
 
 destructor TFileSystemNode.Destroy;
-var
-  x: TFileSystemNode;
 begin
-  if Owner <> nil then
-    if not (csDestroying in Owner.ComponentState) then begin
-      while Assigned(FFirstChild) do begin
-        x := FFirstChild;
-        FFirstChild := x.FNext;
-        x.Free
-      end;
-      if Root = Self then Root := Next
-      else
-        if Parent.FirstChild = Self then Parent.FFirstChild := Next
-        else
-          if Previous <> nil then Previous.FNext := FNext
-    end;
+  FFirstChild.Free;
+  FNext.Free;
   inherited Destroy;
 end;
 

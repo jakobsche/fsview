@@ -17,19 +17,22 @@
       </Item1>
       <Item2>
         <Filename Value="fstree.pas"/>
-        <UnitName Value="fstree"/>
+        <UnitName Value="FSTree"/>
       </Item2>
     </Files>
-    <RequiredPkgs Count="3">
+    <RequiredPkgs Count="4">
       <Item1>
-        <PackageName Value="rtlpatch"/>
+        <PackageName Value="nick"/>
       </Item1>
       <Item2>
-        <PackageName Value="LCL"/>
+        <PackageName Value="rtlpatch"/>
       </Item2>
       <Item3>
-        <PackageName Value="FCL"/>
+        <PackageName Value="LCL"/>
       </Item3>
+      <Item4>
+        <PackageName Value="FCL"/>
+      </Item4>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>

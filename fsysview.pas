@@ -6,14 +6,16 @@ interface
 
 uses
   Classes, SysUtils, LResources, Forms, Controls, Graphics, Dialogs, PairSplitter,
-  ComCtrls, FSTree;
+  ComCtrls, FSTree, DTV;
 
 type
+
   TFileSystemView = class;
+  TFileListView = class;
 
   { TFileSystemTreeView }
 
-  TFileSystemTreeView = class(TCustomTreeView)
+  TFileSystemTreeView = class(TDetailledTreeView)
   private
     function GetFileSystemView: TFileSystemView;
     property FSView: TFileSystemView read GetFileSystemView;
@@ -109,11 +111,6 @@ end;
 { TFileSystemView }
 
 constructor TFileSystemView.Create(AOwner: TComponent);
-var
-  SR: TSearchRec;
-  R: Longint;
-  Root, TN: TTreeNode;
-  FD: TFileDescription;
 begin
   inherited Create(AOwner);
   GetFSTreeView;
@@ -157,7 +154,7 @@ var
   R: Longint;
   SR: TSearchRec;
   FD: TFileDescription;
-  TN: TTreeNode;
+  {TN: TTreeNode;}
 begin
   if not False {(csUpdating in ComponentState)} then begin
     {Updating;}
