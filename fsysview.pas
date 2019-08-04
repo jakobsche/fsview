@@ -91,14 +91,19 @@ var
   P, TN: TTreeNode;
 begin
   inherited Create(AOwner);
-  P := Items.AddObjectFirst(nil, '/', FSView.FileSystem.Root);
+  P := Items.AddObjectFirst(nil, FSView.FileSystem.Root.NodeName, FSView.FileSystem.Root);
   Data := FSView.FileSystem.Root.FirstChild;
-  if Data <> nil then TN := Items.AddChildObjectFirst(P, Data.NodeName, Data);
+  if Data <> nil then
+    if Data.IsDirectory and (Data.NodeName <> '.') and (Data.NodeName <> '..')
+      then TN := Items.AddChildObjectFirst(P, Data.NodeName, Data);
   while Data.Next <> nil do begin
+    WriteLn(Data.NodeName);
     Data := Data.Next;
-    if Data.IsDirectory then TN := P.TreeNodes.AddObject(TN, Data.NodeName, Data)
+    if Data.IsDirectory and (Data.NodeName <> '.') and (Data.NodeName <> '..')
+      then TN := Items.AddChildObject(P, Data.NodeName, Data);
   end;
-  ReadOnly := True
+  P.AlphaSort;
+  ReadOnly := True;
 end;
 
 { TFileSystemView }

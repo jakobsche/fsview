@@ -68,8 +68,9 @@ begin
     Result := nil;
     Exit
   end;
-  if FRoot = nil then
+  if FRoot = nil then begin
     FRoot := TFileSystemNode.Create(Self, '/');
+  end;
   Result := FRoot;
 end;
 
@@ -158,7 +159,10 @@ begin
   else begin
     SR := FSearchRecord;
     R := FindNext(SR);
-    if R = 0 then FNext := TFileSystemNode.Create(Owner as TFileSystem, Parent, SR)
+    if R = 0 then begin
+      FNext := TFileSystemNode.Create(Owner as TFileSystem, Parent, SR);
+      Result := FNext
+    end
     else begin
       FindClose(SR);
     end;
@@ -168,6 +172,7 @@ end;
 function TFileSystemNode.GetNodeName: string;
 begin
   Result := FSearchRecord.Name;
+  if Result = '' then Result := '/'
 end;
 
 function TFileSystemNode.GetPrevious: TFileSystemNode;
